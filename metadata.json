@@ -1,0 +1,6 @@
+{
+  "name": "SafeWalk AI",
+  "description": "Phone-first personal safety companion combining motion detection, voice trigger, GPS location, and multi-signal risk scoring.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
