@@ -184,7 +184,7 @@ fun PrototypeDisclaimerBanner(
             )
             Spacer(modifier = Modifier.width(10.dp))
             Text(
-                text = "SafeWalk AI is a prototype safety companion and should not replace emergency services. In a true emergency, always dial 911 or your local emergency number.",
+                text = "SafeWalk AI is a prototype safety companion and should not replace emergency services. In a true emergency, always dial 100 or your local emergency number.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 16.sp

@@ -54,7 +54,8 @@ import com.example.ui.components.StatusBadge
 fun HomeScreen(
     isSessionActive: Boolean,
     riskLevel: RiskLevel,
-    emergencyContact: EmergencyContact,
+    emergencyContact: EmergencyContact = EmergencyContact(),
+    contacts: List<EmergencyContact> = emptyList(),
     onStartSafeWalk: () -> Unit,
     onNavigateToContacts: () -> Unit,
     onNavigateToHistory: () -> Unit,
@@ -62,6 +63,7 @@ fun HomeScreen(
     onNavigateToDemoMode: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val hasConfiguredContact = contacts.any { it.isConfigured } || emergencyContact.isConfigured
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -186,7 +188,7 @@ fun HomeScreen(
         }
 
         // Emergency Contact Notice if not set
-        if (!emergencyContact.isConfigured) {
+        if (!hasConfiguredContact) {
             Spacer(modifier = Modifier.height(12.dp))
             Card(
                 modifier = Modifier

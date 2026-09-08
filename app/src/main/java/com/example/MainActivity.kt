@@ -2,10 +2,13 @@ package com.example
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -70,7 +73,68 @@ fun SafeWalkApp(viewModel: SafeWalkViewModel) {
     val customPhrase by viewModel.customPhrase.collectAsState()
     val locationData by viewModel.locationData.collectAsState()
     val emergencyContact by viewModel.emergencyContact.collectAsState()
+    val contacts by viewModel.contacts.collectAsState()
     val sessionHistory by viewModel.sessionHistory.collectAsState()
+    val aiAnalysisResult by viewModel.aiAnalysisResult.collectAsState()
+
+    // Permissions check helper
+    fun checkHasMic(): Boolean = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.RECORD_AUDIO
+    ) == PackageManager.PERMISSION_GRANTED
+
+    fun checkHasLocation(): Boolean = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_FINE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_COARSE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
+
+    fun startSafeWalkInternal() {
+        if (!isSessionActive) {
+            viewModel.startSafeWalk(
+                hasMicPermission = checkHasMic(),
+                hasLocationPermission = checkHasLocation()
+            )
+        }
+        navController.navigate("active_session")
+    }
+
+    // Permission launcher for starting SafeWalk
+    val permissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        // Once user finishes permission prompt, start session immediately with granted permissions
+        startSafeWalkInternal()
+    }
+
+    fun onStartWalkClicked() {
+        if (isSessionActive) {
+            navController.navigate("active_session")
+            return
+        }
+
+        val requiredPermissions = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.SEND_SMS
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requiredPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        val missing = requiredPermissions.filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (missing.isNotEmpty()) {
+            permissionsLauncher.launch(missing.toTypedArray())
+        } else {
+            // All already granted: do not ask again!
+            startSafeWalkInternal()
+        }
+    }
 
     val startDestination = if (isOnboardingComplete) "home" else "onboarding"
 
@@ -97,24 +161,8 @@ fun SafeWalkApp(viewModel: SafeWalkViewModel) {
                         isSessionActive = isSessionActive,
                         riskLevel = riskLevel,
                         emergencyContact = emergencyContact,
-                        onStartSafeWalk = {
-                            val hasMic = ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.RECORD_AUDIO
-                            ) == PackageManager.PERMISSION_GRANTED
-                            val hasLoc = ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.ACCESS_FINE_LOCATION
-                            ) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.ACCESS_COARSE_LOCATION
-                            ) == PackageManager.PERMISSION_GRANTED
-
-                            if (!isSessionActive) {
-                                viewModel.startSafeWalk(hasMicPermission = hasMic, hasLocationPermission = hasLoc)
-                            }
-                            navController.navigate("active_session")
-                        },
+                        contacts = contacts,
+                        onStartSafeWalk = { onStartWalkClicked() },
                         onNavigateToContacts = { navController.navigate("contacts") },
                         onNavigateToHistory = { navController.navigate("history") },
                         onNavigateToHowItWorks = { navController.navigate("how_it_works") },
@@ -133,6 +181,7 @@ fun SafeWalkApp(viewModel: SafeWalkViewModel) {
                         customPhrase = customPhrase,
                         locationData = locationData,
                         riskSignals = riskSignals,
+                        aiAnalysisResult = aiAnalysisResult,
                         onStopSafeWalk = {
                             viewModel.stopSafeWalk()
                             navController.navigate("home") {
@@ -153,10 +202,10 @@ fun SafeWalkApp(viewModel: SafeWalkViewModel) {
 
                 composable("contacts") {
                     EmergencyContactsScreen(
-                        currentContact = emergencyContact,
+                        contacts = contacts,
                         customPhrase = customPhrase,
                         onSaveContact = { viewModel.saveContact(it) },
-                        onDeleteContact = { viewModel.deleteContact() },
+                        onDeleteContact = { viewModel.deleteContact(it) },
                         onSaveCustomPhrase = { viewModel.saveCustomPhrase(it) },
                         onNavigateBack = { navController.popBackStack() }
                     )
@@ -181,6 +230,7 @@ fun SafeWalkApp(viewModel: SafeWalkViewModel) {
                         currentScore = riskScore,
                         riskLevel = riskLevel,
                         riskSignals = riskSignals,
+                        aiAnalysisResult = aiAnalysisResult,
                         onSimulateNormalWalking = { viewModel.simulateNormalWalking() },
                         onSimulateSuddenMovement = { viewModel.simulateSuddenMotion() },
                         onSimulatePossibleFall = { viewModel.simulatePossibleFall() },
@@ -193,12 +243,13 @@ fun SafeWalkApp(viewModel: SafeWalkViewModel) {
             }
         }
 
-        // Full-Screen Emergency Alert Countdown Overlay
+        // Full-Screen Emergency Alert Countdown Overlay (5 seconds)
         if (isAlertActive) {
             EmergencyAlertOverlay(
                 countdownSeconds = alertCountdown,
                 isDispatched = alertDispatched,
                 emergencyContact = emergencyContact,
+                contacts = contacts,
                 formattedSmsMessage = viewModel.getEmergencySmsMessage(),
                 onCancelAlert = { viewModel.cancelEmergencyAlert() },
                 onSendSms = { viewModel.launchSmsEmergencyIntent(context) }

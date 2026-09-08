@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -9,7 +8,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,10 +19,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContactPhone
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -43,7 +44,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -55,12 +55,21 @@ import com.example.data.EmergencyContact
 fun EmergencyAlertOverlay(
     countdownSeconds: Int,
     isDispatched: Boolean,
-    emergencyContact: EmergencyContact,
+    emergencyContact: EmergencyContact = EmergencyContact(),
+    contacts: List<EmergencyContact> = emptyList(),
     formattedSmsMessage: String,
     onCancelAlert: () -> Unit,
     onSendSms: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val activeContacts = if (contacts.isNotEmpty()) {
+        contacts.filter { it.isConfigured }
+    } else if (emergencyContact.isConfigured) {
+        listOf(emergencyContact)
+    } else {
+        emptyList()
+    }
+
     val pulseTransition = rememberInfiniteTransition(label = "alert_pulse")
     val pulseScale by pulseTransition.animateFloat(
         initialValue = 0.95f,
@@ -80,7 +89,9 @@ fun EmergencyAlertOverlay(
         contentAlignment = Alignment.Center
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -113,10 +124,10 @@ fun EmergencyAlertOverlay(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             Text(
-                text = if (!isDispatched) "Possible emergency detected" else "Emergency Alert Triggered",
+                text = if (!isDispatched) "Possible emergency detected" else "Emergency Alert Dispatched!",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Black,
                 color = Color.White,
@@ -129,13 +140,13 @@ fun EmergencyAlertOverlay(
                 text = if (!isDispatched)
                     "Multiple risk signals detected. Countdown active."
                 else
-                    "Alert threshold reached. Preparing emergency dispatch.",
+                    "Alert automatically sent to your emergency contacts with GPS location.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFFFCA5A5),
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Countdown Timer or Dispatched State
             if (!isDispatched) {
@@ -149,7 +160,8 @@ fun EmergencyAlertOverlay(
                             color = Color(0xFF3B1219),
                             style = Stroke(width = stroke)
                         )
-                        val progress = (countdownSeconds / 10f).coerceIn(0f, 1f)
+                        // 5-second countdown progress ring
+                        val progress = (countdownSeconds / 5f).coerceIn(0f, 1f)
                         drawArc(
                             color = Color(0xFFEF4444),
                             startAngle = -90f,
@@ -162,7 +174,7 @@ fun EmergencyAlertOverlay(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = "$countdownSeconds",
-                            fontSize = 48.sp,
+                            fontSize = 50.sp,
                             fontWeight = FontWeight.Black,
                             color = Color.White
                         )
@@ -176,7 +188,7 @@ fun EmergencyAlertOverlay(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(28.dp))
 
                 // Large Primary Button: "I'M SAFE - CANCEL ALERT"
                 Button(
@@ -204,7 +216,7 @@ fun EmergencyAlertOverlay(
                     )
                 }
             } else {
-                // Countdown reaches zero state
+                // Countdown reached zero -> Dispatched state (Automated, no extra confirmation required)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
@@ -217,26 +229,55 @@ fun EmergencyAlertOverlay(
                     )
                 ) {
                     Column(modifier = Modifier.padding(18.dp)) {
-                        Text(
-                            text = "Emergency alert would now be sent to your emergency contact with your latest location.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFFFECDD3),
-                            fontWeight = FontWeight.SemiBold,
-                            lineHeight = 22.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        if (emergencyContact.isConfigured) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Recipient: ${emergencyContact.name} (${emergencyContact.phoneNumber})",
-                                style = MaterialTheme.typography.bodySmall,
+                                text = "Emergency Alert Dispatched",
+                                style = MaterialTheme.typography.titleSmall,
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold
                             )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        if (activeContacts.isNotEmpty()) {
+                            Text(
+                                text = "Recipients (${activeContacts.size}):",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFF87171),
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            activeContacts.forEach { contact ->
+                                Row(
+                                    modifier = Modifier.padding(vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContactPhone,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFCA5A5),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "${contact.name} (${contact.phoneNumber})",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
                         } else {
                             Text(
-                                text = "Recipient: No contact saved (Share intent will open)",
+                                text = "No emergency contacts configured. Tap below to share alert.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFFFCD34D)
                             )
@@ -260,48 +301,56 @@ fun EmergencyAlertOverlay(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
                 Button(
-                    onClick = onSendSms,
+                    onClick = onCancelAlert,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp)
-                        .testTag("send_emergency_sms_button"),
+                        .testTag("return_to_walk_button"),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFEF4444)
+                        containerColor = Color(0xFF10B981)
                     )
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Send,
+                        imageVector = Icons.Default.CheckCircle,
                         contentDescription = null,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Dispatch Alert via SMS / Share",
+                        text = "I'm Safe - Return to Walk",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 OutlinedButton(
-                    onClick = onCancelAlert,
+                    onClick = onSendSms,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
+                        .height(48.dp)
+                        .testTag("send_emergency_sms_button"),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Color(0xFF10B981)
+                        contentColor = Color(0xFFFCA5A5)
                     )
                 ) {
+                    Icon(
+                        imageVector = Icons.Default.Send,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "I'm Safe - Return to Walk",
-                        fontWeight = FontWeight.Bold
+                        text = "Open in SMS App / Share",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
                     )
                 }
             }
@@ -309,7 +358,7 @@ fun EmergencyAlertOverlay(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "SafeWalk AI does not automatically place 911 calls.",
+                text = "SafeWalk AI does not automatically place 100 calls.",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color(0xFF94A3B8)
             )

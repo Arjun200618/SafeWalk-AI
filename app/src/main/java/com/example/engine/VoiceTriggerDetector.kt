@@ -18,6 +18,7 @@ import java.util.Locale
  * VoiceTriggerDetector: Listens on-device for safety emergency phrases:
  * "Help me", "Emergency", "Save me", or a user-defined custom emergency phrase.
  *
+ * Designed with a stable lifecycle that avoids rapid reconnect cycles or busy-looping.
  * No raw audio data is recorded or stored to disk.
  */
 class VoiceTriggerDetector(
@@ -27,7 +28,9 @@ class VoiceTriggerDetector(
     private var speechRecognizer: SpeechRecognizer? = null
     private var customPhrase: String = ""
     private var isSessionActive = false
+    private var isListeningNow = false
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var pendingRestartRunnable: Runnable? = null
 
     private val defaultPhrases = listOf("help me", "emergency", "save me", "help", "danger")
 
@@ -65,21 +68,36 @@ class VoiceTriggerDetector(
 
     fun stopListening() {
         isSessionActive = false
+        isListeningNow = false
+        cancelPendingRestart()
         mainHandler.post {
             try {
-                speechRecognizer?.stopListening()
+                speechRecognizer?.cancel()
                 speechRecognizer?.destroy()
                 speechRecognizer = null
-            } catch (_: Exception) {
-                // Ignore cleanup errors
-            }
+            } catch (_: Exception) {}
         }
         _voiceStatus.value = VoiceStatus.OFF
     }
 
+    private fun cancelPendingRestart() {
+        pendingRestartRunnable?.let { mainHandler.removeCallbacks(it) }
+        pendingRestartRunnable = null
+    }
+
+    private fun scheduleCleanRestart(delayMs: Long = 2000L) {
+        if (!isSessionActive) return
+        cancelPendingRestart()
+        pendingRestartRunnable = Runnable {
+            if (isSessionActive) {
+                startListeningIntent()
+            }
+        }
+        mainHandler.postDelayed(pendingRestartRunnable!!, delayMs)
+    }
+
     /**
-     * Called directly by Demo mode or the in-app "Demo Voice Trigger" button
-     * to guarantee seamless hackathon judge testing regardless of mic permissions or ambient noise.
+     * Trigger simulated emergency voice phrase for testing or demo mode.
      */
     fun simulateVoiceTrigger(phrase: String = "Help me", notifyListener: Boolean = true) {
         _lastDetectedPhrase.value = phrase
@@ -88,6 +106,7 @@ class VoiceTriggerDetector(
             onEmergencyPhraseDetected(phrase)
         }
 
+        cancelPendingRestart()
         mainHandler.postDelayed({
             if (isSessionActive) {
                 _voiceStatus.value = VoiceStatus.LISTENING
@@ -97,53 +116,90 @@ class VoiceTriggerDetector(
 
     private fun initRecognizer() {
         if (!isSessionActive) return
-        speechRecognizer?.destroy()
+        try {
+            speechRecognizer?.destroy()
+        } catch (_: Exception) {}
 
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
-            setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    if (isSessionActive) _voiceStatus.value = VoiceStatus.LISTENING
-                }
-
-                override fun onBeginningOfSpeech() = Unit
-                override fun onRmsChanged(rmsdB: Float) = Unit
-                override fun onBufferReceived(buffer: ByteArray?) = Unit
-                override fun onEndOfSpeech() = Unit
-
-                override fun onError(error: Int) {
-                    if (isSessionActive) {
-                        // Restart recognition loop after a short breath
-                        mainHandler.postDelayed({
-                            if (isSessionActive) startListeningIntent()
-                        }, 1200L)
+        try {
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+                setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        if (isSessionActive) {
+                            isListeningNow = true
+                            _voiceStatus.value = VoiceStatus.LISTENING
+                        }
                     }
-                }
 
-                override fun onResults(results: Bundle?) {
-                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    checkMatches(matches)
-                    if (isSessionActive) {
-                        mainHandler.postDelayed({
-                            if (isSessionActive) startListeningIntent()
-                        }, 800L)
+                    override fun onBeginningOfSpeech() {
+                        // User began speaking
                     }
-                }
 
-                override fun onPartialResults(partialResults: Bundle?) {
-                    val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    checkMatches(matches)
-                }
+                    override fun onRmsChanged(rmsdB: Float) = Unit
+                    override fun onBufferReceived(buffer: ByteArray?) = Unit
 
-                override fun onEvent(eventType: Int, params: Bundle?) = Unit
-            })
+                    override fun onEndOfSpeech() {
+                        isListeningNow = false
+                    }
+
+                    override fun onError(error: Int) {
+                        isListeningNow = false
+                        if (!isSessionActive) return
+
+                        when (error) {
+                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
+                                _voiceStatus.value = VoiceStatus.UNAVAILABLE
+                                return
+                            }
+                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
+                                try {
+                                    speechRecognizer?.cancel()
+                                } catch (_: Exception) {}
+                                scheduleCleanRestart(2500L)
+                            }
+                            SpeechRecognizer.ERROR_NO_MATCH,
+                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                                // Normal cadence when user is silent while walking
+                                scheduleCleanRestart(2000L)
+                            }
+                            SpeechRecognizer.ERROR_NETWORK,
+                            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> {
+                                // On-device speech recognition or offline fallback
+                                scheduleCleanRestart(3000L)
+                            }
+                            else -> {
+                                scheduleCleanRestart(2500L)
+                            }
+                        }
+                    }
+
+                    override fun onResults(results: Bundle?) {
+                        isListeningNow = false
+                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        checkMatches(matches)
+                        if (isSessionActive) {
+                            scheduleCleanRestart(1500L)
+                        }
+                    }
+
+                    override fun onPartialResults(partialResults: Bundle?) {
+                        val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        checkMatches(matches)
+                    }
+
+                    override fun onEvent(eventType: Int, params: Bundle?) = Unit
+                })
+            }
+
+            startListeningIntent()
+        } catch (_: Exception) {
+            _voiceStatus.value = VoiceStatus.UNAVAILABLE
         }
-
-        startListeningIntent()
     }
 
     private fun startListeningIntent() {
         if (!isSessionActive || speechRecognizer == null) return
         try {
+            speechRecognizer?.cancel()
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(
                     RecognizerIntent.EXTRA_LANGUAGE_MODEL,

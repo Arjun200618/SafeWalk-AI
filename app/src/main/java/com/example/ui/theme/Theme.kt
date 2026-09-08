@@ -48,7 +48,7 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun SafeWalkTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Keep branded colors for hackathon theme consistency
+    dynamicColor: Boolean = false, // Keep branded high-contrast theme consistency
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {

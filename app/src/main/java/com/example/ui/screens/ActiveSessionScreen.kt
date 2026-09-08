@@ -20,8 +20,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.RecordVoiceOver
@@ -51,11 +51,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ai.AiAnalysisResult
 import com.example.data.LocationData
 import com.example.data.MotionData
 import com.example.data.RiskLevel
 import com.example.data.RiskSignal
 import com.example.data.VoiceStatus
+import com.example.ui.components.AiSafetyAnalysisCard
 import com.example.ui.components.RiskGauge
 import com.example.ui.components.RiskSignalCard
 import com.example.ui.components.StatusBadge
@@ -74,6 +76,7 @@ fun ActiveSessionScreen(
     customPhrase: String,
     locationData: LocationData,
     riskSignals: List<RiskSignal>,
+    aiAnalysisResult: AiAnalysisResult = AiAnalysisResult(),
     onStopSafeWalk: () -> Unit,
     onTriggerDemoVoice: () -> Unit,
     onNavigateToDemoMode: () -> Unit,
@@ -247,7 +250,7 @@ fun ActiveSessionScreen(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Default.DirectionsWalk,
+                                    imageVector = Icons.AutoMirrored.Filled.DirectionsWalk,
                                     contentDescription = null,
                                     tint = Color(0xFF0284C7),
                                     modifier = Modifier.size(20.dp)
@@ -494,7 +497,10 @@ fun ActiveSessionScreen(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
+            // AI Safety Analysis Card
             item {
+                Spacer(modifier = Modifier.height(10.dp))
+                AiSafetyAnalysisCard(result = aiAnalysisResult)
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }

@@ -125,7 +125,7 @@ class LocationTracker(
     }
 
     /**
-     * For hackathon demo simulations
+     * For demo simulations
      */
     fun simulateLocation(lat: Double = 37.7749, lng: Double = -122.4194) {
         _locationData.value = LocationData(

@@ -98,6 +98,7 @@ data class RiskSignal(
 )
 
 data class EmergencyContact(
+    val id: String = java.util.UUID.randomUUID().toString(),
     val name: String = "",
     val phoneNumber: String = "",
     val relationship: String = ""

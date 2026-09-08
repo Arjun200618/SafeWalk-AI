@@ -46,8 +46,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ai.AiAnalysisResult
 import com.example.data.RiskLevel
 import com.example.data.RiskSignal
+import com.example.ui.components.AiSafetyAnalysisCard
 import com.example.ui.components.RiskGauge
 import com.example.ui.components.RiskSignalCard
 
@@ -57,6 +59,7 @@ fun DemoModeScreen(
     currentScore: Int,
     riskLevel: RiskLevel,
     riskSignals: List<RiskSignal>,
+    aiAnalysisResult: AiAnalysisResult = AiAnalysisResult(),
     onSimulateNormalWalking: () -> Unit,
     onSimulateSuddenMovement: () -> Unit,
     onSimulatePossibleFall: () -> Unit,
@@ -73,7 +76,7 @@ fun DemoModeScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "Hackathon Demo Mode",
+                            text = "Demo Mode",
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp
                         )
@@ -129,7 +132,7 @@ fun DemoModeScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "Hackathon Demo Mode Active",
+                                text = "Demo Mode Active",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleSmall,
                                 color = Color(0xFF818CF8)
@@ -148,6 +151,11 @@ fun DemoModeScreen(
 
                 // Real-time Risk Gauge
                 RiskGauge(score = currentScore, riskLevel = riskLevel)
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // AI Safety Analysis Card in Demo Mode
+                AiSafetyAnalysisCard(result = aiAnalysisResult)
 
                 Spacer(modifier = Modifier.height(20.dp))
 

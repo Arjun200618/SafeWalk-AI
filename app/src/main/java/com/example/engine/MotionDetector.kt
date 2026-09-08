@@ -99,6 +99,8 @@ class MotionDetector(
         )
     }
 
+    fun simulateSuddenMovement() = simulateSuddenMotion()
+
     fun simulatePossibleFall() {
         _motionData.value = MotionData(
             accelX = 1.1f,

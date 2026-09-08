@@ -60,6 +60,51 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `verify up to 5 emergency contacts management and validation`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val prefs = ContactPreferences(context)
+    prefs.saveContacts(emptyList())
+
+    assertEquals(0, prefs.getContacts().size)
+
+    // Add 5 contacts
+    for (i in 1..5) {
+      val added = prefs.addContact(
+        EmergencyContact(
+          name = "Contact $i",
+          phoneNumber = "+1555000000$i",
+          relationship = "Friend"
+        )
+      )
+      assertTrue(added)
+    }
+
+    val savedList = prefs.getContacts()
+    assertEquals(5, savedList.size)
+
+    // 6th contact must be rejected (max 5 contacts constraint)
+    val sixthAdded = prefs.addContact(
+      EmergencyContact(
+        name = "Contact 6",
+        phoneNumber = "+15550000006"
+      )
+    )
+    assertFalse(sixthAdded)
+    assertEquals(5, prefs.getContacts().size)
+
+    // Delete one contact
+    val firstId = savedList[0].id
+    prefs.deleteContact(firstId)
+    assertEquals(4, prefs.getContacts().size)
+
+    // Phone validation checks
+    assertTrue(ContactPreferences.isValidPhoneNumber("+1 (555) 123-4567"))
+    assertTrue(ContactPreferences.isValidPhoneNumber("1234567890"))
+    assertFalse(ContactPreferences.isValidPhoneNumber("abc"))
+    assertFalse(ContactPreferences.isValidPhoneNumber("12"))
+  }
+
+  @Test
   fun `verify safety risk engine scoring and critical alert triggering`() {
     var criticalAlertFired = false
     val scope = CoroutineScope(Dispatchers.Unconfined)
@@ -138,7 +183,7 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `verify SafeWalkViewModel full lifecycle and demo simulations`() {
+  fun `verify SafeWalkViewModel full lifecycle and 5-second countdown alert`() {
     val application = ApplicationProvider.getApplicationContext<Application>()
     val viewModel = SafeWalkViewModel(application)
 
@@ -160,12 +205,19 @@ class ExampleRobolectricTest {
     assertEquals(5, viewModel.currentRiskScore.value)
     assertEquals("Normal Walking", viewModel.motionData.value.status.label)
 
-    // 5. Test Combined Danger Simulation (Fall + Voice) -> triggers critical alert overlay
+    // 5. Test Combined Danger Simulation (Fall + Voice) -> triggers 5s critical alert overlay
     viewModel.simulateCombinedEmergency()
     assertTrue(viewModel.isAlertActive.value)
     assertEquals(100, viewModel.currentRiskScore.value)
     assertEquals(RiskLevel.CRITICAL, viewModel.currentRiskLevel.value)
-    assertEquals(10, viewModel.alertCountdown.value)
+    // 5-second countdown requirement
+    assertEquals(5, viewModel.alertCountdown.value)
+
+    // Verify SMS message format contains Google Maps URL and coordinates
+    val message = viewModel.getEmergencySmsMessage()
+    assertTrue(message.contains("EMERGENCY ALERT! SafeWalk AI detected a possible danger."))
+    assertTrue(message.contains("Google Maps:"))
+    assertTrue(message.contains("https://www.google.com/maps"))
 
     // 6. Test I'M SAFE - CANCEL ALERT
     viewModel.cancelEmergencyAlert()
@@ -178,5 +230,120 @@ class ExampleRobolectricTest {
     assertFalse(viewModel.isSessionActive.value)
     assertTrue(viewModel.sessionHistory.value.isNotEmpty())
   }
-}
 
+  @Test
+  fun `verify AiRiskAnalyzer handles demo mode simulations and non-blocking safety layer`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val scope = CoroutineScope(Dispatchers.Unconfined)
+    val analyzer = com.example.ai.AiRiskAnalyzer(context, scope, Dispatchers.Unconfined)
+
+    // Initial state
+    assertEquals(com.example.ai.AiStatus.READY, analyzer.analysisResult.value.status)
+    assertEquals("SAFE", analyzer.analysisResult.value.riskAssessment)
+
+    // 1. Normal Walking Demo Simulation
+    analyzer.onSituationUpdated(
+      com.example.ai.SituationSummary(
+        currentRiskScore = 0,
+        riskLevel = "SAFE",
+        accelMagnitude = 9.8f,
+        gyroMagnitude = 0.1f,
+        isDemoSimulation = true,
+        simulationType = "NORMAL_WALKING"
+      )
+    )
+    val normalResult = analyzer.analysisResult.value
+    assertEquals("SAFE", normalResult.riskAssessment)
+    assertTrue(normalResult.confidence >= 90)
+
+    // 2. Sudden Movement Spike Demo Simulation
+    analyzer.onSituationUpdated(
+      com.example.ai.SituationSummary(
+        currentRiskScore = 25,
+        riskLevel = "SAFE",
+        accelMagnitude = 18.5f,
+        gyroMagnitude = 1.2f,
+        suddenMovementDetected = true,
+        isDemoSimulation = true,
+        simulationType = "SUDDEN_MOVEMENT"
+      )
+    )
+    val suddenResult = analyzer.analysisResult.value
+    assertEquals("CAUTION", suddenResult.riskAssessment)
+    assertTrue(suddenResult.explanation.contains("Sudden acceleration"))
+
+    // 3. Possible Fall Demo Simulation
+    analyzer.onSituationUpdated(
+      com.example.ai.SituationSummary(
+        currentRiskScore = 65,
+        riskLevel = "HIGH_RISK",
+        accelMagnitude = 1.1f,
+        gyroMagnitude = 4.2f,
+        possibleFallDetected = true,
+        isDemoSimulation = true,
+        simulationType = "POSSIBLE_FALL"
+      )
+    )
+    val fallResult = analyzer.analysisResult.value
+    assertEquals("HIGH RISK", fallResult.riskAssessment)
+    assertTrue(fallResult.explanation.contains("fall") || fallResult.explanation.contains("rotation"))
+
+    // 4. Voice Emergency Demo Simulation
+    analyzer.onSituationUpdated(
+      com.example.ai.SituationSummary(
+        currentRiskScore = 60,
+        riskLevel = "HIGH_RISK",
+        accelMagnitude = 9.8f,
+        gyroMagnitude = 0.2f,
+        emergencyVoiceDetected = true,
+        detectedVoicePhrase = "Help me",
+        isDemoSimulation = true,
+        simulationType = "VOICE_EMERGENCY"
+      )
+    )
+    val voiceResult = analyzer.analysisResult.value
+    assertEquals("HIGH RISK", voiceResult.riskAssessment)
+    assertTrue(voiceResult.explanation.contains("Help me"))
+
+    // 5. Combined Danger Demo Simulation
+    analyzer.onSituationUpdated(
+      com.example.ai.SituationSummary(
+        currentRiskScore = 100,
+        riskLevel = "CRITICAL",
+        accelMagnitude = 1.0f,
+        gyroMagnitude = 4.5f,
+        possibleFallDetected = true,
+        emergencyVoiceDetected = true,
+        detectedVoicePhrase = "Emergency! Save me",
+        isDemoSimulation = true,
+        simulationType = "COMBINED_DANGER"
+      )
+    )
+    val dangerResult = analyzer.analysisResult.value
+    assertEquals("CRITICAL", dangerResult.riskAssessment)
+    assertEquals(98, dangerResult.confidence)
+  }
+
+  @Test
+  fun `verify failsafe behavior when AI is unavailable during live monitoring`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val scope = CoroutineScope(Dispatchers.Unconfined)
+    val analyzer = com.example.ai.AiRiskAnalyzer(context, scope, Dispatchers.Unconfined)
+
+    // Live monitoring without demo flag when Firebase is unavailable
+    analyzer.dispatchAnalysis(
+      com.example.ai.SituationSummary(
+        currentRiskScore = 30,
+        riskLevel = "CAUTION",
+        accelMagnitude = 14f,
+        gyroMagnitude = 1.2f,
+        suddenMovementDetected = true,
+        isDemoSimulation = false
+      )
+    )
+
+    val result = analyzer.analysisResult.value
+    assertEquals(com.example.ai.AiStatus.UNAVAILABLE, result.status)
+    assertEquals("AI analysis is temporarily unavailable. Safety monitoring remains active.", result.explanation)
+  }
+}

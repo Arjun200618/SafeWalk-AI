@@ -91,7 +91,7 @@ fun HowItWorksScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = "HACKATHON ARCHITECTURE OVERVIEW",
+                text = "SYSTEM ARCHITECTURE OVERVIEW",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold,
@@ -144,8 +144,8 @@ fun HowItWorksScreen(
 
             PipelineStepCard(
                 step = "4. VERIFICATION",
-                title = "User Cancellation Window (10s)",
-                description = "If score hits CRITICAL (>=80), a full-screen 10-second countdown opens. User can tap \"I'M SAFE\" to cancel.",
+                title = "User Cancellation Window (5s)",
+                description = "If score hits CRITICAL (>=80), a full-screen 5-second countdown opens. User can tap \"I'M SAFE\" to cancel.",
                 icon = Icons.Default.CheckCircle,
                 tint = Color(0xFF10B981)
             )
@@ -155,7 +155,7 @@ fun HowItWorksScreen(
             PipelineStepCard(
                 step = "5. DISPATCH",
                 title = "Emergency Alert Workflow",
-                description = "If timer expires without cancellation, formats GPS coordinates and launches SMS / sharing intent to emergency contact.",
+                description = "If 5s countdown expires without cancellation, automatically sends emergency alert with GPS location to all saved contacts (up to 5 contacts).",
                 icon = Icons.Default.NotificationsActive,
                 tint = Color(0xFFEF4444)
             )
